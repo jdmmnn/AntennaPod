@@ -1,0 +1,31 @@
+plugins {
+    alias(libs.plugins.android.library)
+}
+apply from: "../../common.gradle"
+apply from: "../../playFlavor.gradle"
+
+android {
+    namespace "de.danoeh.antennapod.playback.sonos"
+}
+
+dependencies {
+    implementation project(':event')
+    implementation project(':model')
+    implementation project(':playback:base')
+    implementation project(':storage:preferences')
+    implementation project(':ui:i18n')
+
+    annotationProcessor libs.androidx.annotation
+    implementation libs.androidx.appcompat
+    implementation libs.androidx.media3.common
+    implementation libs.androidx.media3.session
+    implementation libs.androidx.mediarouter
+    implementation libs.okhttp
+    implementation libs.eventbus
+
+    testImplementation libs.junit
+    testImplementation libs.robolectric
+    testImplementation libs.androidx.test.core
+    testImplementation libs.okhttp.mockwebserver
+    testImplementation libs.mockito.core
+}

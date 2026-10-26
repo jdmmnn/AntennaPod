@@ -64,6 +64,7 @@ glide-okhttp3-integration = { module = "com.github.bumptech.glide:okhttp3-integr
 glide-compiler = { module = "com.github.bumptech.glide:compiler", version.ref = "glide" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-urlconnection = { module = "com.squareup.okhttp3:okhttp-urlconnection", version.ref = "okhttp" }
+okhttp-mockwebserver = { module = "com.squareup.okhttp3:mockwebserver", version.ref = "okhttp" }
 eventbus = { module = "org.greenrobot:eventbus", version = "3.3.1" }
 rxandroid = { module = "io.reactivex.rxjava3:rxandroid", version = "3.0.2" }
 rxjava = { module = "io.reactivex.rxjava3:rxjava", version = "3.1.5" }
