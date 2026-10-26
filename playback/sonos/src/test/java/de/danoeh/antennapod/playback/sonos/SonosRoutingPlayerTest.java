@@ -1,24 +1,33 @@
 package de.danoeh.antennapod.playback.sonos;
 
 import android.content.Context;
+import android.os.Bundle;
 import android.os.Looper;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.media3.common.C;
 import androidx.media3.common.DeviceInfo;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.SimpleBasePlayer;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import de.danoeh.antennapod.event.MessageEvent;
+import de.danoeh.antennapod.playback.base.MediaItemAdapter;
 import de.danoeh.antennapod.storage.preferences.SonosPreferences;
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -101,6 +110,16 @@ public class SonosRoutingPlayerTest {
         client.volume = 33;
         idleFor(1000);
         assertEquals(33, sessionManager.getVolume());
+
+        sessionManager.setVolume(45);
+        idleFor(10);
+        assertTrue(client.calls.contains("setGroupVolume:45"));
+        assertEquals(45, sessionManager.getVolume());
+
+        sessionManager.updateVolume(-5);
+        idleFor(10);
+        assertTrue(client.calls.contains("setGroupVolume:40"));
+        assertEquals(40, sessionManager.getVolume());
     }
 
     @Test
@@ -177,6 +196,123 @@ public class SonosRoutingPlayerTest {
         idleFor(10);
         assertEquals(0, client.count("stop"));
         assertEquals(null, sessionManager.getConnectedGroupName());
+    }
+
+    @Test
+    public void testSetMediaItemDuringActiveSessionStaysOnSonos() {
+        ArrayDeque<Runnable> bgTasks = new ArrayDeque<>();
+        router = new SonosRoutingPlayer(ApplicationProvider.getApplicationContext(), local, sessionManager,
+                group -> new SonosPlayer(group, client, bgTasks::add, Looper.getMainLooper()));
+        local.load(SonosPlayerTest.item(), 42_000, true);
+        sessionManager.connect(GROUP);
+        while (!bgTasks.isEmpty()) {
+            bgTasks.poll().run();
+        }
+        idleFor(500);
+        while (!bgTasks.isEmpty()) {
+            bgTasks.poll().run();
+        }
+        idleFor(10);
+
+        idleFor(1000);
+        assertEquals(1, bgTasks.size());
+
+        String nextUrl = "https://example.com/episode2.mp3";
+        Bundle extras = new Bundle();
+        extras.putString(MediaItemAdapter.KEY_STREAM_URL, nextUrl);
+        extras.putString(MediaItemAdapter.KEY_MIME_TYPE, "audio/mpeg");
+        MediaItem nextItem = new MediaItem.Builder()
+                .setMediaId("456")
+                .setMediaMetadata(new MediaMetadata.Builder().setTitle("Next").setExtras(extras).build())
+                .build();
+        router.setMediaItem(nextItem);
+        bgTasks.poll().run();
+        idleFor(1);
+        client.calls.clear();
+        while (!bgTasks.isEmpty()) {
+            bgTasks.poll().run();
+            idleFor(1);
+        }
+        idleFor(1000);
+        while (!bgTasks.isEmpty()) {
+            bgTasks.poll().run();
+        }
+        idleFor(10);
+
+        assertEquals(DeviceInfo.PLAYBACK_TYPE_REMOTE, router.getDeviceInfo().playbackType);
+        assertEquals("456", router.getCurrentMediaItem().mediaId);
+        assertEquals("setAvTransportUri:" + nextUrl, client.calls.get(0));
+        assertEquals("play", client.calls.get(1));
+        assertEquals(0, client.count("getMediaInfo"));
+        assertEquals(Player.STATE_IDLE, local.getPlaybackState());
+    }
+
+    private final List<String> messages = new ArrayList<>();
+
+    @Subscribe
+    public void onMessage(MessageEvent event) {
+        messages.add(event.message);
+    }
+
+    private static MediaItem itemWith(@Nullable String url, @Nullable String mime) {
+        Bundle extras = new Bundle();
+        if (url != null) {
+            extras.putString(MediaItemAdapter.KEY_STREAM_URL, url);
+        }
+        if (mime != null) {
+            extras.putString(MediaItemAdapter.KEY_MIME_TYPE, mime);
+        }
+        return new MediaItem.Builder()
+                .setMediaId("999")
+                .setMediaMetadata(new MediaMetadata.Builder().setTitle("Bad").setExtras(extras).build())
+                .build();
+    }
+
+    @Test
+    public void testConnectRejectsUnplayableEpisode() {
+        messages.clear();
+        EventBus.getDefault().register(this);
+        try {
+            local.load(itemWith("https://example.com/video.mp4", "video/mp4"), 42_000, true);
+            sessionManager.connect(GROUP);
+            idleFor(10);
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, router.getDeviceInfo().playbackType);
+            assertEquals(null, sessionManager.getConnectedGroupName());
+            assertEquals(Player.STATE_READY, local.getPlaybackState());
+            assertTrue(local.getPlayWhenReady());
+            assertTrue(local.getCurrentPosition() >= 42_000 && local.getCurrentPosition() < 42_100);
+            assertEquals(0, client.count("setAvTransportUri"));
+            assertEquals(1, messages.size());
+            assertTrue(messages.get(0).contains("videos are not supported"));
+        } finally {
+            EventBus.getDefault().unregister(this);
+        }
+    }
+
+    @Test
+    public void testEpisodeChangeRejectsUnplayableEpisodeAndEndsSession() {
+        messages.clear();
+        EventBus.getDefault().register(this);
+        try {
+            local.load(SonosPlayerTest.item(), 42_000, true);
+            sessionManager.connect(GROUP);
+            idleFor(10);
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_REMOTE, router.getDeviceInfo().playbackType);
+            client.calls.clear();
+
+            router.setMediaItem(itemWith("https://example.com/ep.opus", "audio/opus"));
+            idleFor(10);
+
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, router.getDeviceInfo().playbackType);
+            assertEquals(null, sessionManager.getConnectedGroupName());
+            assertEquals(0, client.count("setAvTransportUri"));
+            assertEquals(1, client.count("stop"));
+            assertEquals("999", local.getCurrentMediaItem().mediaId);
+            assertEquals(1, messages.size());
+            assertTrue(messages.get(0).contains("unsupported audio format"));
+        } finally {
+            EventBus.getDefault().unregister(this);
+        }
     }
 
     static class FakeLocalPlayer extends SimpleBasePlayer {

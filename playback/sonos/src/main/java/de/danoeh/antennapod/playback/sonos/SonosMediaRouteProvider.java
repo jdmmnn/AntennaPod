@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.IntentFilter;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.mediarouter.app.MediaRouteDialogFactory;
 import androidx.mediarouter.media.MediaRouteDescriptor;
 import androidx.mediarouter.media.MediaRouteDiscoveryRequest;
 import androidx.mediarouter.media.MediaRouteProvider;
@@ -57,6 +58,10 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
         return new MediaRouteSelector.Builder().addControlCategory(CATEGORY_SONOS).build();
     }
 
+    public static MediaRouteDialogFactory dialogFactory() {
+        return SonosRouteDialogFactory.getInstance();
+    }
+
     @Override
     public void onDiscoveryRequestChanged(@Nullable MediaRouteDiscoveryRequest request) {
         if (request == null || !request.getSelector().hasControlCategory(CATEGORY_SONOS)) {
@@ -82,6 +87,13 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
         List<SonosGroup> visible = new ArrayList<>(groups);
         if (connected != null && !visible.contains(connected)) {
             visible.add(connected);
+        }
+        String lastGroupId = SonosPreferences.getLastGroupId();
+        for (int i = 1; i < visible.size(); i++) {
+            if (visible.get(i).getGroupId().equals(lastGroupId)) {
+                visible.add(0, visible.remove(i));
+                break;
+            }
         }
         MediaRouteProviderDescriptor.Builder builder = new MediaRouteProviderDescriptor.Builder();
         for (SonosGroup group : visible) {
@@ -150,6 +162,11 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
         @Override
         public void onSetVolume(int volume) {
             sessionManager.setVolume(volume);
+        }
+
+        @Override
+        public void onUpdateVolume(int delta) {
+            sessionManager.updateVolume(delta);
         }
     }
 }

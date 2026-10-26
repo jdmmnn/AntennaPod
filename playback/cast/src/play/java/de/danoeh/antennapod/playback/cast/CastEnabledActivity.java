@@ -37,9 +37,17 @@ public abstract class CastEnabledActivity extends AppCompatActivity {
     }
 
     public void requestCastButton(Menu menu) {
+        requestCastButton(menu, true);
+    }
+
+    public void requestCastButton(Menu menu, boolean includeSonos) {
         SonosMediaRouteProvider.registerIfEnabled(this);
-        boolean canSonos = SonosPreferences.isEnabled();
+        boolean canSonos = includeSonos && SonosPreferences.isEnabled();
         if (!canCast && !canSonos) {
+            MenuItem item = menu.findItem(R.id.media_route_menu_item);
+            if (item != null) {
+                item.setVisible(false);
+            }
             return;
         }
         if (menu.findItem(R.id.media_route_menu_item) == null) {
@@ -56,9 +64,12 @@ public abstract class CastEnabledActivity extends AppCompatActivity {
             selector.addSelector(SonosMediaRouteProvider.selector());
         }
         MenuItem item = menu.findItem(R.id.media_route_menu_item);
+        item.setVisible(true);
         MediaRouteActionProvider provider = (MediaRouteActionProvider) MenuItemCompat.getActionProvider(item);
         if (provider != null) {
             provider.setRouteSelector(selector.build());
+            provider.setDialogFactory(SonosMediaRouteProvider.dialogFactory());
+            provider.setAlwaysVisible(true);
         }
     }
 }

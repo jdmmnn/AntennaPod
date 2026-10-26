@@ -33,7 +33,7 @@ class SonosPlayer extends SimpleBasePlayer {
     static final long POLL_PAUSED_MS = 5000;
     static final long UNREACHABLE_MS = 10000;
     static final long ENDED_TOLERANCE_MS = 3000;
-    static final int VOLUME_STEP = 2;
+    static final int VOLUME_STEP = 1;
     private static final int ERROR_NOT_COORDINATOR = 800;
     private static final DeviceInfo DEVICE_INFO = new DeviceInfo.Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE)
             .setMinVolume(0)
@@ -80,6 +80,7 @@ class SonosPlayer extends SimpleBasePlayer {
     private boolean positionAdvancing;
     private long durationMs = C.TIME_UNSET;
     private int volume;
+    private long lastVolumePollTime = C.TIME_UNSET;
     @Nullable
     private SonosStatus.TransportState lastTransportState;
     private long failingSince = C.TIME_UNSET;
@@ -158,15 +159,18 @@ class SonosPlayer extends SimpleBasePlayer {
     protected ListenableFuture<?> handleSetMediaItems(@NonNull List<MediaItem> mediaItems, int startIndex,
                                                       long startPositionMs) {
         commandSequence++;
+        stopPolling();
         ended = false;
         error = null;
         loaded = false;
         expectedUri = null;
+        expectedMediaId = C.INDEX_UNSET;
         durationMs = C.TIME_UNSET;
+        lastVolumePollTime = C.TIME_UNSET;
         lastTransportState = null;
         if (mediaItems.isEmpty()) {
             items = Collections.emptyList();
-            stopPolling();
+            playbackState = STATE_IDLE;
             return Futures.immediateVoidFuture();
         }
         int index = startIndex == C.INDEX_UNSET ? 0 : Math.min(startIndex, mediaItems.size() - 1);
@@ -175,6 +179,7 @@ class SonosPlayer extends SimpleBasePlayer {
         if (prepared) {
             return load();
         }
+        playbackState = STATE_IDLE;
         return Futures.immediateVoidFuture();
     }
 
@@ -223,7 +228,7 @@ class SonosPlayer extends SimpleBasePlayer {
         commandSequence++;
         setPosition(currentPositionMs(), playWhenReady && playbackState == STATE_READY);
         this.playWhenReady = playWhenReady;
-        if (!loaded) {
+        if (!loaded || (!playWhenReady && playbackState == STATE_ENDED)) {
             return Futures.immediateVoidFuture();
         }
         if (playWhenReady && playbackState == STATE_ENDED) {
@@ -308,6 +313,7 @@ class SonosPlayer extends SimpleBasePlayer {
     @Override
     protected ListenableFuture<?> handleSetDeviceVolume(int deviceVolume, int flags) {
         volume = Math.max(0, Math.min(100, deviceVolume));
+        lastVolumePollTime = SystemClock.elapsedRealtime();
         int target = volume;
         return run(() -> client.setGroupVolume(group.getCoordinatorHost(), group.getCoordinatorPort(), target),
                 false);
@@ -371,13 +377,15 @@ class SonosPlayer extends SimpleBasePlayer {
         }
         int sequence = commandSequence;
         SonosGroup current = group;
+        long now = SystemClock.elapsedRealtime();
+        boolean pollVolume = lastVolumePollTime == C.TIME_UNSET || now - lastVolumePollTime >= POLL_PAUSED_MS;
         executor.execute(() -> {
             try {
                 String host = current.getCoordinatorHost();
                 int port = current.getCoordinatorPort();
                 String transportInfo = client.getTransportInfo(host, port);
                 String positionInfo = client.getPositionInfo(host, port);
-                String groupVolume = client.getGroupVolume(host, port);
+                String groupVolume = pollVolume ? client.getGroupVolume(host, port) : null;
                 SonosStatus status = SonosXmlParser.parseStatus(transportInfo, positionInfo, null, groupVolume,
                         SystemClock.elapsedRealtime());
                 handler.post(() -> onPollSuccess(status, sequence));
@@ -393,12 +401,12 @@ class SonosPlayer extends SimpleBasePlayer {
         }
         failingSince = C.TIME_UNSET;
         topologyChecked = false;
-        if (expectedUri != null && !expectedUri.equals(status.getTrackUri())) {
-            verifyTakeover();
-            return;
-        }
         if (sequence != commandSequence) {
             schedulePoll(POLL_PLAYING_MS);
+            return;
+        }
+        if (expectedUri != null && !expectedUri.equals(status.getTrackUri())) {
+            verifyTakeover();
             return;
         }
         applyStatus(status);
@@ -412,6 +420,7 @@ class SonosPlayer extends SimpleBasePlayer {
         long previousPosition = currentPositionMs();
         if (status.getGroupVolume() != SonosStatus.VOLUME_UNKNOWN) {
             volume = status.getGroupVolume();
+            lastVolumePollTime = status.getTimestamp();
         }
         if (status.getDurationMs() != C.TIME_UNSET) {
             durationMs = status.getDurationMs();
@@ -472,6 +481,7 @@ class SonosPlayer extends SimpleBasePlayer {
     private void verifyTakeover() {
         SonosGroup current = group;
         long mediaId = expectedMediaId;
+        int sequence = commandSequence;
         executor.execute(() -> {
             Long remoteMediaId = null;
             String remoteUri = null;
@@ -485,7 +495,7 @@ class SonosPlayer extends SimpleBasePlayer {
             Long finalMediaId = remoteMediaId;
             String finalUri = remoteUri;
             handler.post(() -> {
-                if (released || !loaded) {
+                if (released || !loaded || sequence != commandSequence) {
                     return;
                 }
                 if (finalMediaId != null && finalMediaId == mediaId && finalUri != null) {

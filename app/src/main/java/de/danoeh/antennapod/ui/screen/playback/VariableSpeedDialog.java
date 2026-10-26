@@ -23,6 +23,7 @@ import de.danoeh.antennapod.event.playback.SpeedChangedEvent;
 import de.danoeh.antennapod.playback.base.BuildConfig;
 import de.danoeh.antennapod.playback.service.PlaybackController;
 import de.danoeh.antennapod.playback.service.internal.MediaLibrarySessionCallback;
+import de.danoeh.antennapod.playback.sonos.SonosSessionManager;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.common.ItemOffsetDecoration;
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -155,6 +156,12 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
                 controller.setSkipSilence(isChecked);
             }
         });
+        boolean sonosActive = SonosSessionManager.getInstance(getContext()).getConnectedGroupName() != null;
+        speedSeekBar.setEnabled(!sonosActive);
+        speedSeekBar.setAlpha(sonosActive ? 0.4f : 1.0f);
+        addCurrentSpeedChip.setEnabled(!sonosActive);
+        selectedSpeedsGrid.setAlpha(sonosActive ? 0.4f : 1.0f);
+        skipSilenceCheckbox.setEnabled(!sonosActive);
         return root;
     }
 
@@ -184,6 +191,7 @@ public class VariableSpeedDialog extends BottomSheetDialogFragment {
         @Override
         public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
             float speed = selectedSpeeds.get(position);
+            holder.chip.setEnabled(SonosSessionManager.getInstance(getContext()).getConnectedGroupName() == null);
 
             holder.chip.setText(String.format(Locale.getDefault(), "%1$.2f", speed));
             if (pendingDeleteSpeed == speed) {

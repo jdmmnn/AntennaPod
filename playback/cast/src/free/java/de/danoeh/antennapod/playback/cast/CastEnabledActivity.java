@@ -24,9 +24,13 @@ public abstract class CastEnabledActivity extends AppCompatActivity {
     }
 
     public final void requestCastButton(Menu menu) {
+        requestCastButton(menu, true);
+    }
+
+    public final void requestCastButton(Menu menu, boolean includeSonos) {
         SonosMediaRouteProvider.registerIfEnabled(this);
         MenuItem item = menu.findItem(R.id.media_route_menu_item);
-        if (!SonosPreferences.isEnabled()) {
+        if (!includeSonos || !SonosPreferences.isEnabled()) {
             if (item != null) {
                 item.setVisible(false);
             }
@@ -40,6 +44,8 @@ public abstract class CastEnabledActivity extends AppCompatActivity {
         MediaRouteActionProvider provider = (MediaRouteActionProvider) MenuItemCompat.getActionProvider(item);
         if (provider != null) {
             provider.setRouteSelector(SonosMediaRouteProvider.selector());
+            provider.setDialogFactory(SonosMediaRouteProvider.dialogFactory());
+            provider.setAlwaysVisible(true);
         }
     }
 }

@@ -34,6 +34,7 @@ public class SonosPlayerTest {
     static MediaItem item() {
         Bundle extras = new Bundle();
         extras.putString(MediaItemAdapter.KEY_STREAM_URL, FakeSonosClient.URL);
+        extras.putString(MediaItemAdapter.KEY_MIME_TYPE, "audio/mpeg");
         return new MediaItem.Builder()
                 .setMediaId("123")
                 .setMediaMetadata(new MediaMetadata.Builder().setTitle("T").setExtras(extras).build())
@@ -134,12 +135,61 @@ public class SonosPlayerTest {
     }
 
     @Test
+    public void testPlaybackSpeedNotAvailableAndIgnored() {
+        assertFalse(player.getAvailableCommands().contains(Player.COMMAND_SET_SPEED_AND_PITCH));
+        startPlaying();
+        int callsBefore = client.calls.size();
+        player.setPlaybackSpeed(1.5f);
+        idleFor(10);
+        assertEquals(callsBefore, client.calls.size());
+    }
+
+    @Test
     public void testVolume() {
         startPlaying();
         assertEquals(20, player.getDeviceVolume());
-        player.setDeviceVolume(35, 0);
+        player.setDeviceVolume(37, 0);
         idleFor(10);
-        assertTrue(client.calls.contains("setGroupVolume:35"));
+        assertTrue(client.calls.contains("setGroupVolume:37"));
+        assertEquals(37, player.getDeviceVolume());
+
+        player.increaseDeviceVolume(0);
+        idleFor(10);
+        assertTrue(client.calls.contains("setGroupVolume:38"));
+        assertEquals(38, player.getDeviceVolume());
+
+        player.decreaseDeviceVolume(0);
+        idleFor(10);
+        assertEquals("setGroupVolume:37", client.calls.get(client.calls.size() - 1));
+        assertEquals(37, player.getDeviceVolume());
+
+        player.setDeviceVolume(100, 0);
+        idleFor(10);
+        player.increaseDeviceVolume(0);
+        idleFor(10);
+        assertEquals("setGroupVolume:100", client.calls.get(client.calls.size() - 1));
+        assertEquals(100, player.getDeviceVolume());
+
+        player.setDeviceVolume(0, 0);
+        idleFor(10);
+        player.decreaseDeviceVolume(0);
+        idleFor(10);
+        assertEquals("setGroupVolume:0", client.calls.get(client.calls.size() - 1));
+        assertEquals(0, player.getDeviceVolume());
+    }
+
+    @Test
+    public void testGroupVolumePolledEveryFiveSeconds() {
+        startPlaying();
+        assertEquals(20, player.getDeviceVolume());
+        int before = client.count("getGroupVolume");
+        client.volume = 42;
+        idleFor(3000);
+        assertEquals(0, client.count("getGroupVolume") - before);
+        assertEquals(20, player.getDeviceVolume());
+        idleFor(2000);
+        assertEquals(1, client.count("getGroupVolume") - before);
+        assertEquals(42, player.getDeviceVolume());
     }
 
     @Test

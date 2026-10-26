@@ -18,6 +18,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import de.danoeh.antennapod.event.MessageEvent;
 import org.greenrobot.eventbus.EventBus;
 
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -99,11 +100,19 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
     }
 
     private void switchToSonos(SonosGroup group, @Nullable SonosSessionManager.SyncInfo syncInfo) {
+        if (syncInfo == null && localPlayer.getCurrentMediaItem() != null) {
+            SonosPlayable.Reason reason = SonosPlayable.check(localPlayer.getCurrentMediaItem());
+            if (reason != null) {
+                sessionManager.onPlayableRejected(reason);
+                return;
+            }
+        }
         if (sonosPlayer != null) {
             switchToLocal(false);
         }
         SonosPlayer sonos = playerFactory.create(group);
         sonos.setListener(this);
+        sonos.addListener(volumeListener);
         if (syncInfo != null) {
             long mediaId = syncInfo.mediaId;
             MediaItem item = SonosDidl.toMediaItem(syncInfo.didl, syncInfo.status.getTrackUri(), mediaId);
@@ -120,7 +129,6 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
             }
             localPlayer.stop();
         }
-        sonos.addListener(volumeListener);
         sonosPlayer = sonos;
         setPlayer(sonos);
     }
@@ -135,6 +143,13 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
     public void onSetVolume(int volume) {
         if (sonosPlayer != null) {
             sonosPlayer.setDeviceVolume(volume, 0);
+        }
+    }
+
+    @Override
+    public void onUpdateVolume(int delta) {
+        if (sonosPlayer != null) {
+            sonosPlayer.setDeviceVolume(sonosPlayer.getDeviceVolume() + delta, 0);
         }
     }
 
@@ -184,6 +199,23 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
             localPlayer.removeListener(castHandoverListener);
             castHandoverListener = null;
         }
+    }
+
+    @NonNull
+    @Override
+    protected ListenableFuture<?> handleSetMediaItems(@NonNull List<MediaItem> mediaItems, int startIndex,
+                                                      long startPositionMs) {
+        if (sonosPlayer != null && !mediaItems.isEmpty()) {
+            int index = startIndex != C.INDEX_UNSET ? startIndex : 0;
+            MediaItem item = mediaItems.get(index);
+            SonosPlayable.Reason reason = SonosPlayable.check(item);
+            if (reason != null) {
+                switchToLocal(true);
+                sessionManager.onPlayableRejected(reason);
+                return super.handleSetMediaItems(mediaItems, startIndex, startPositionMs);
+            }
+        }
+        return super.handleSetMediaItems(mediaItems, startIndex, startPositionMs);
     }
 
     @NonNull

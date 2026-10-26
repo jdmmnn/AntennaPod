@@ -46,6 +46,8 @@ public final class SonosSessionManager {
         void onDisconnect(boolean stopRemote);
 
         void onSetVolume(int volume);
+
+        void onUpdateVolume(int delta);
     }
 
     @SuppressLint("StaticFieldLeak")
@@ -161,21 +163,35 @@ public final class SonosSessionManager {
         if (failure != null) {
             Log.w(TAG, "Unable to connect to " + group.getName() + ": " + failure.getMessage());
             EventBus.getDefault().post(new MessageEvent(context.getString(R.string.sonos_session_unreachable)));
-            unselectRoute();
+            unselectRoute(MediaRouter.UNSELECT_REASON_UNKNOWN);
             return;
         }
         connectedGroup = group;
-        SonosPreferences.setLastGroupId(group.getGroupId());
-        notifyChanged();
         if (listener != null) {
             listener.onConnect(group, syncInfo);
         } else {
             pendingConnect = true;
             pendingSync = syncInfo;
         }
+        if (connectedGroup != null) {
+            SonosPreferences.setLastGroupId(group.getGroupId());
+            notifyChanged();
+        }
     }
 
-    void disconnect(boolean stopRemote) {
+    void onPlayableRejected(SonosPlayable.Reason reason) {
+        connectSequence++;
+        pendingConnect = false;
+        pendingSync = null;
+        if (connectedGroup != null) {
+            connectedGroup = null;
+            notifyChanged();
+        }
+        unselectRoute(MediaRouter.UNSELECT_REASON_STOPPED);
+        EventBus.getDefault().post(new MessageEvent(SonosPlayable.getErrorMessage(context, reason)));
+    }
+
+    public void disconnect(boolean stopRemote) {
         connectSequence++;
         if (connectedGroup == null) {
             return;
@@ -206,23 +222,37 @@ public final class SonosSessionManager {
         }
     }
 
+    void updateVolume(int delta) {
+        if (listener != null && connectedGroup != null) {
+            listener.onUpdateVolume(delta);
+        }
+    }
+
     void onSessionEnded() {
         if (connectedGroup == null) {
             return;
         }
         connectedGroup = null;
         notifyChanged();
-        unselectRoute();
+        unselectRoute(MediaRouter.UNSELECT_REASON_UNKNOWN);
     }
 
-    private void unselectRoute() {
-        try {
-            MediaRouter router = MediaRouter.getInstance(context);
-            if (router.getSelectedRoute().getId().contains(SonosGroup.ROUTE_ID_PREFIX)) {
-                router.unselect(MediaRouter.UNSELECT_REASON_UNKNOWN);
+    private void unselectRoute(int reason) {
+        Runnable action = () -> {
+            try {
+                MediaRouter router = MediaRouter.getInstance(context);
+                if (reason == MediaRouter.UNSELECT_REASON_STOPPED
+                        || router.getSelectedRoute().getId().contains(SonosGroup.ROUTE_ID_PREFIX)) {
+                    router.unselect(reason);
+                }
+            } catch (RuntimeException e) {
+                Log.w(TAG, "Unable to unselect route: " + e.getMessage());
             }
-        } catch (RuntimeException e) {
-            Log.w(TAG, "Unable to unselect route: " + e.getMessage());
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action.run();
+        } else {
+            handler.post(action);
         }
     }
 

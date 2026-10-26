@@ -88,6 +88,7 @@ public class AudioPlayerFragment extends Fragment implements
     public static final int POS_DESCRIPTION = 1;
     private static final int NUM_CONTENT_FRAGMENTS = 2;
 
+    private ImageButton butPlaybackSpeed;
     private TextView txtvPlaybackSpeed;
     private ViewPager2 pager;
     private TextView txtvPosition;
@@ -147,7 +148,7 @@ public class AudioPlayerFragment extends Fragment implements
 
         setupLengthTextView();
         setupControlButtons();
-        final ImageButton butPlaybackSpeed = root.findViewById(R.id.butPlaybackSpeed);
+        butPlaybackSpeed = root.findViewById(R.id.butPlaybackSpeed);
         butPlaybackSpeed.setOnClickListener(v -> new VariableSpeedDialog().show(getChildFragmentManager(), null));
         sbPosition.setOnSeekBarChangeListener(this);
 
@@ -282,6 +283,10 @@ public class AudioPlayerFragment extends Fragment implements
     }
 
     private void updateSonosPlayingOn(@Nullable String groupName) {
+        boolean sonosActive = groupName != null;
+        butPlaybackSpeed.setEnabled(!sonosActive);
+        butPlaybackSpeed.setAlpha(sonosActive ? 0.4f : 1.0f);
+        txtvPlaybackSpeed.setAlpha(sonosActive ? 0.4f : 1.0f);
         if (groupName == null) {
             txtvSonosPlayingOn.setVisibility(View.GONE);
         } else {

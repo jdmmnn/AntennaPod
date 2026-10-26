@@ -128,7 +128,7 @@ public class VideoplayerActivity extends CastEnabledActivity
 
         Toolbar toolbar = viewBinding.controlsView.getToolbar();
         toolbar.inflateMenu(R.menu.mediaplayer);
-        requestCastButton(toolbar.getMenu());
+        requestCastButton(toolbar.getMenu(), false);
         toolbar.setOnMenuItemClickListener(this);
         toolbar.setNavigationOnClickListener(v -> {
             Intent intent = new Intent(VideoplayerActivity.this, MainActivity.class);
