@@ -549,6 +549,9 @@
     <string name="pref_playback_speed_sum">Customize the speeds available for variable speed playback</string>
     <string name="pref_sonos_support_title">Sonos support (experimental)</string>
     <string name="pref_sonos_support_summary">Show Sonos speakers in the same Wi-Fi when streaming</string>
+    <string name="sonos_playing_on">Playing on %1$s</string>
+    <string name="sonos_session_taken_over">Sonos is now playing something else. Playback paused on this device.</string>
+    <string name="sonos_session_unreachable">Lost connection to Sonos. Playback paused on this device.</string>
     <string name="pref_feed_playback_speed_sum">The speed to use when starting audio playback for episodes in this podcast</string>
     <string name="pref_feed_skip">Auto skip</string>
     <string name="pref_feed_skip_sum">Skip introductions and ending credits</string>

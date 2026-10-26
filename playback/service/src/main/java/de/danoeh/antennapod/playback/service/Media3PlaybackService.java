@@ -48,6 +48,7 @@ import de.danoeh.antennapod.playback.base.MediaItemAdapter;
 import de.danoeh.antennapod.playback.base.PlayerStatus;
 import de.danoeh.antennapod.playback.base.RewindAfterPauseUtils;
 import de.danoeh.antennapod.playback.cast.CastPlayerWrapper;
+import de.danoeh.antennapod.playback.sonos.SonosRoutingPlayer;
 import de.danoeh.antennapod.playback.service.internal.ExoPlayerUtils;
 import de.danoeh.antennapod.playback.service.internal.MediaLibrarySessionCallback;
 import de.danoeh.antennapod.playback.service.internal.PlayableUtils;
@@ -122,7 +123,8 @@ public class Media3PlaybackService extends MediaLibraryService {
         });
         initLoudnessEnhancer(exoPlayer.getAudioSessionId());
         Player maybeCastPlayer = CastPlayerWrapper.wrap(exoPlayer, this);
-        player = new ForwardingPlayer(maybeCastPlayer) {
+        Player maybeSonosPlayer = SonosRoutingPlayer.wrap(maybeCastPlayer, this);
+        player = new ForwardingPlayer(maybeSonosPlayer) {
             @Override
             @NonNull
             public Player.Commands getAvailableCommands() {
