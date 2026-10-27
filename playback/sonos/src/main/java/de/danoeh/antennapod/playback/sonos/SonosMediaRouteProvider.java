@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.IntentFilter;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.mediarouter.app.MediaRouteDialogFactory;
 import androidx.mediarouter.media.MediaRouteDescriptor;
 import androidx.mediarouter.media.MediaRouteDiscoveryRequest;
@@ -29,11 +30,17 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
     private final SonosDiscovery discovery;
     private List<SonosGroup> groups;
     private boolean discovering;
+    private boolean searchCompleted;
     private long lastDiscoveryTime;
 
     private SonosMediaRouteProvider(Context context) {
+        this(context, SonosSessionManager.getInstance(context));
+    }
+
+    @VisibleForTesting
+    SonosMediaRouteProvider(Context context, SonosSessionManager sessionManager) {
         super(context);
-        sessionManager = SonosSessionManager.getInstance(context);
+        this.sessionManager = sessionManager;
         discovery = SonosDiscovery.create(context, sessionManager.getClient());
         groups = SonosDiscovery.getCachedGroups();
         sessionManager.addObserver(this::publishRoutes);
@@ -52,6 +59,15 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
             router.removeProvider(instance);
             instance = null;
         }
+    }
+
+    static boolean isSearching() {
+        SonosMediaRouteProvider provider = instance;
+        return provider != null && provider.isSearchPending();
+    }
+
+    boolean isSearchPending() {
+        return discovering || !searchCompleted;
     }
 
     public static MediaRouteSelector selector() {
@@ -75,6 +91,7 @@ public final class SonosMediaRouteProvider extends MediaRouteProvider {
         lastDiscoveryTime = now;
         discovery.start(found -> {
             discovering = false;
+            searchCompleted = true;
             groups = found;
             publishRoutes();
         });

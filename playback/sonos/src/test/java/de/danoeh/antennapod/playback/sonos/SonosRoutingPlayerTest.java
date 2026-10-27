@@ -165,6 +165,28 @@ public class SonosRoutingPlayerTest {
     }
 
     @Test
+    public void testDisconnectAfterSyncUsesResolvedItem() {
+        MediaItem resolved = new MediaItem.Builder()
+                .setMediaId("77")
+                .setUri("file:///downloads/episode.mp3")
+                .build();
+        router = new SonosRoutingPlayer(ApplicationProvider.getApplicationContext(), local, sessionManager,
+                group -> new SonosPlayer(group, client, Runnable::run, Looper.getMainLooper()),
+                mediaId -> mediaId == 77 ? resolved : null, Runnable::run);
+        client.transportState = "PLAYING";
+        client.relTime = "0:05:00";
+        client.mediaInfoDidl = FakeSonosClient.didlWithId(77);
+        sessionManager.connect(GROUP);
+        idleFor(10);
+        sessionManager.disconnect(true);
+        idleFor(10);
+        assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, router.getDeviceInfo().playbackType);
+        assertEquals("file:///downloads/episode.mp3", local.getCurrentMediaItem().localConfiguration.uri.toString());
+        assertFalse(local.getPlayWhenReady());
+        assertTrue(local.getCurrentPosition() >= 300_000 && local.getCurrentPosition() < 302_000);
+    }
+
+    @Test
     public void testWaitsForCastHandover() {
         local.load(SonosPlayerTest.item(), 42_000, true);
         local.setRemote(true);
@@ -310,6 +332,28 @@ public class SonosRoutingPlayerTest {
             assertEquals("999", local.getCurrentMediaItem().mediaId);
             assertEquals(1, messages.size());
             assertTrue(messages.get(0).contains("unsupported audio format"));
+        } finally {
+            EventBus.getDefault().unregister(this);
+        }
+    }
+
+    @Test
+    public void testLoadFailureRestoresLocalPlaybackAndReports() {
+        messages.clear();
+        EventBus.getDefault().register(this);
+        try {
+            client.failSetUri = true;
+            local.load(SonosPlayerTest.item(), 42_000, true);
+            sessionManager.connect(GROUP);
+            idleFor(10);
+            assertEquals(DeviceInfo.PLAYBACK_TYPE_LOCAL, router.getDeviceInfo().playbackType);
+            assertEquals(null, sessionManager.getConnectedGroupName());
+            assertEquals("123", local.getCurrentMediaItem().mediaId);
+            assertEquals(Player.STATE_READY, local.getPlaybackState());
+            assertTrue(local.getPlayWhenReady());
+            assertTrue(local.getCurrentPosition() >= 42_000 && local.getCurrentPosition() < 42_100);
+            assertEquals(1, messages.size());
+            assertTrue(messages.get(0).contains("Cannot be played on Sonos"));
         } finally {
             EventBus.getDefault().unregister(this);
         }

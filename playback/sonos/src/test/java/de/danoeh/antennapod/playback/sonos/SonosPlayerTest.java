@@ -227,6 +227,32 @@ public class SonosPlayerTest {
     }
 
     @Test
+    public void testUnreachableWhilePausedEndsWithinTenSecondsOfLastContact() {
+        client.transportState = "PAUSED_PLAYBACK";
+        player.setMediaItem(item(), 5000);
+        player.prepare();
+        idleFor(600);
+        client.failAll = true;
+        idleFor(9800);
+        assertTrue(endReasons.isEmpty());
+        idleFor(300);
+        assertEquals(Collections.singletonList(SonosPlayer.EndReason.UNREACHABLE), endReasons);
+    }
+
+    @Test
+    public void testShortOutageDoesNotEndSession() {
+        client.transportState = "PAUSED_PLAYBACK";
+        player.setMediaItem(item(), 5000);
+        player.prepare();
+        idleFor(600);
+        client.failAll = true;
+        idleFor(6000);
+        client.failAll = false;
+        idleFor(10000);
+        assertTrue(endReasons.isEmpty());
+    }
+
+    @Test
     public void testTakeoverWithoutStop() {
         startPlaying();
         client.trackUri = "x-sonosapi-stream:radio";

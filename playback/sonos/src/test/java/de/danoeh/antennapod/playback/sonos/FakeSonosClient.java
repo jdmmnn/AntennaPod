@@ -16,6 +16,7 @@ class FakeSonosClient extends SonosSoapClient {
     String mediaInfoUri = URL;
     int volume = 20;
     boolean failAll;
+    boolean failSetUri;
     String zoneGroupState = "";
 
     static String transportXml(String state) {
@@ -49,6 +50,9 @@ class FakeSonosClient extends SonosSoapClient {
     @Override
     void setAvTransportUri(String host, int port, String uri, String didl) throws IOException {
         record(host, "setAvTransportUri:" + uri);
+        if (failSetUri) {
+            throw new SonosSoapException(714);
+        }
         trackUri = uri;
         mediaInfoUri = uri;
         mediaInfoDidl = didl;

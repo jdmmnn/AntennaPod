@@ -61,6 +61,7 @@ class SonosPlayer extends SimpleBasePlayer {
     private final Executor executor;
     private final Handler handler;
     private final Runnable pollRunnable = this::poll;
+    private final Runnable unreachableRunnable = this::onUnreachable;
     private volatile SonosGroup group;
     @Nullable
     private Listener listener;
@@ -84,6 +85,7 @@ class SonosPlayer extends SimpleBasePlayer {
     @Nullable
     private SonosStatus.TransportState lastTransportState;
     private long failingSince = C.TIME_UNSET;
+    private long lastReachableMs = C.TIME_UNSET;
     private boolean topologyChecked;
     private int commandSequence;
     @Nullable
@@ -111,6 +113,7 @@ class SonosPlayer extends SimpleBasePlayer {
         loaded = true;
         expectedUri = status.getTrackUri();
         expectedMediaId = mediaId;
+        lastReachableMs = status.getTimestamp();
         applyStatus(status);
         invalidateState();
         schedulePoll(nextPollDelay());
@@ -206,6 +209,7 @@ class SonosPlayer extends SimpleBasePlayer {
         expectedUri = streamUrl;
         expectedMediaId = parseMediaId(item.mediaId);
         loaded = true;
+        lastReachableMs = SystemClock.elapsedRealtime();
         playbackState = STATE_BUFFERING;
         long start = positionMs;
         boolean play = playWhenReady;
@@ -342,6 +346,7 @@ class SonosPlayer extends SimpleBasePlayer {
                 call.run();
                 handler.post(() -> {
                     if (!released) {
+                        markReachable(SystemClock.elapsedRealtime());
                         schedulePoll(POLL_PLAYING_MS / 2);
                     }
                     future.set(null);
@@ -399,7 +404,7 @@ class SonosPlayer extends SimpleBasePlayer {
         if (released || !loaded) {
             return;
         }
-        failingSince = C.TIME_UNSET;
+        markReachable(status.getTimestamp());
         topologyChecked = false;
         if (sequence != commandSequence) {
             schedulePoll(POLL_PLAYING_MS);
@@ -513,11 +518,13 @@ class SonosPlayer extends SimpleBasePlayer {
             return;
         }
         long now = SystemClock.elapsedRealtime();
+        long reachable = lastReachableMs == C.TIME_UNSET ? now : lastReachableMs;
         if (failingSince == C.TIME_UNSET) {
             failingSince = now;
+            handler.postDelayed(unreachableRunnable, Math.max(0, reachable + UNREACHABLE_MS - now));
         }
-        if (now - failingSince >= UNREACHABLE_MS) {
-            finishSession(EndReason.UNREACHABLE);
+        if (now - reachable >= UNREACHABLE_MS) {
+            onUnreachable();
             return;
         }
         boolean notCoordinator = e instanceof SonosSoapException
@@ -528,6 +535,19 @@ class SonosPlayer extends SimpleBasePlayer {
         } else {
             schedulePoll(POLL_PLAYING_MS);
         }
+    }
+
+    private void markReachable(long timestamp) {
+        lastReachableMs = timestamp;
+        failingSince = C.TIME_UNSET;
+        handler.removeCallbacks(unreachableRunnable);
+    }
+
+    private void onUnreachable() {
+        if (released || !loaded || failingSince == C.TIME_UNSET) {
+            return;
+        }
+        finishSession(EndReason.UNREACHABLE);
     }
 
     private void refreshCoordinator() {
@@ -616,6 +636,8 @@ class SonosPlayer extends SimpleBasePlayer {
 
     private void stopPolling() {
         handler.removeCallbacks(pollRunnable);
+        handler.removeCallbacks(unreachableRunnable);
+        failingSince = C.TIME_UNSET;
     }
 
     private void setPosition(long position, boolean advancing) {

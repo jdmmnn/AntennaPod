@@ -20,6 +20,7 @@ import de.danoeh.antennapod.storage.preferences.SonosPreferences;
 public final class SonosRouteDialogFactory extends MediaRouteDialogFactory {
     private static final SonosRouteDialogFactory INSTANCE = new SonosRouteDialogFactory();
     static final String LAST_ROUTE_MARK = "★ ";
+    private static final long SEARCH_RECHECK_MS = 500;
 
     public static MediaRouteDialogFactory getInstance() {
         return INSTANCE;
@@ -39,8 +40,8 @@ public final class SonosRouteDialogFactory extends MediaRouteDialogFactory {
         return routeId.equals(target) || routeId.endsWith(":" + target);
     }
 
-    static boolean shouldShowNoDevicesHint(boolean sonosEnabled, boolean hasSonosRoute) {
-        return sonosEnabled && !hasSonosRoute;
+    static boolean shouldShowNoDevicesHint(boolean sonosEnabled, boolean hasSonosRoute, boolean searching) {
+        return sonosEnabled && !hasSonosRoute && !searching;
     }
 
     public static class SonosChooserDialogFragment extends MediaRouteChooserDialogFragment {
@@ -56,6 +57,7 @@ public final class SonosRouteDialogFactory extends MediaRouteDialogFactory {
         private TextView hintView;
         private ArrayAdapter<MediaRouter.RouteInfo> baseAdapter;
         private boolean reordering;
+        private final Runnable recheckRunnable = this::onRoutesChanged;
 
         SonosChooserDialog(@NonNull Context context) {
             super(context);
@@ -103,8 +105,13 @@ public final class SonosRouteDialogFactory extends MediaRouteDialogFactory {
             try {
                 boolean hasSonos = reorderAndCheckSonos(baseAdapter, SonosPreferences.getLastGroupId());
                 if (hintView != null) {
-                    boolean showHint = shouldShowNoDevicesHint(SonosPreferences.isEnabled(), hasSonos);
+                    boolean searching = SonosMediaRouteProvider.isSearching();
+                    boolean showHint = shouldShowNoDevicesHint(SonosPreferences.isEnabled(), hasSonos, searching);
                     hintView.setVisibility(showHint ? View.VISIBLE : View.GONE);
+                    hintView.removeCallbacks(recheckRunnable);
+                    if (searching && !hasSonos) {
+                        hintView.postDelayed(recheckRunnable, SEARCH_RECHECK_MS);
+                    }
                 }
             } finally {
                 reordering = false;

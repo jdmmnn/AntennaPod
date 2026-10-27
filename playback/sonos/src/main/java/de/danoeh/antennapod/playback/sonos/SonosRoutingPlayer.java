@@ -31,11 +31,21 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
         SonosPlayer create(SonosGroup group);
     }
 
+    public interface MediaItemResolver {
+        @Nullable
+        MediaItem resolve(long mediaId);
+    }
+
     private final Context context;
     private final Player localPlayer;
     private final SonosSessionManager sessionManager;
     private final SonosPlayerFactory playerFactory;
+    @Nullable
+    private final MediaItemResolver resolver;
+    private final Executor resolverExecutor;
     private final Handler handler;
+    @Nullable
+    private String syncedMediaId;
     @Nullable
     private SonosPlayer sonosPlayer;
     @Nullable
@@ -51,21 +61,30 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
 
     SonosRoutingPlayer(Context context, Player localPlayer, SonosSessionManager sessionManager,
                        SonosPlayerFactory playerFactory) {
+        this(context, localPlayer, sessionManager, playerFactory, null, Runnable::run);
+    }
+
+    SonosRoutingPlayer(Context context, Player localPlayer, SonosSessionManager sessionManager,
+                       SonosPlayerFactory playerFactory, @Nullable MediaItemResolver resolver,
+                       Executor resolverExecutor) {
         super(localPlayer);
         this.context = context;
         this.localPlayer = localPlayer;
         this.sessionManager = sessionManager;
         this.playerFactory = playerFactory;
+        this.resolver = resolver;
+        this.resolverExecutor = resolverExecutor;
         this.handler = new Handler(localPlayer.getApplicationLooper());
         sessionManager.setListener(this);
     }
 
-    public static Player wrap(Player localPlayer, Context context) {
+    public static Player wrap(Player localPlayer, Context context, MediaItemResolver resolver) {
         SonosSessionManager sessionManager = SonosSessionManager.getInstance(context);
         Executor executor = Executors.newSingleThreadExecutor();
         Looper looper = localPlayer.getApplicationLooper();
         return new SonosRoutingPlayer(context.getApplicationContext(), localPlayer, sessionManager,
-                group -> new SonosPlayer(group, sessionManager.getClient(), executor, looper));
+                group -> new SonosPlayer(group, sessionManager.getClient(), executor, looper), resolver,
+                Executors.newSingleThreadExecutor());
     }
 
     @Override
@@ -108,7 +127,7 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
             }
         }
         if (sonosPlayer != null) {
-            switchToLocal(false);
+            switchToLocal(false, false);
         }
         SonosPlayer sonos = playerFactory.create(group);
         sonos.setListener(this);
@@ -116,6 +135,7 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
         if (syncInfo != null) {
             long mediaId = syncInfo.mediaId;
             MediaItem item = SonosDidl.toMediaItem(syncInfo.didl, syncInfo.status.getTrackUri(), mediaId);
+            syncedMediaId = item.mediaId;
             localPlayer.stop();
             sonos.attach(item, syncInfo.status, mediaId);
         } else {
@@ -136,7 +156,7 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
     @Override
     public void onDisconnect(boolean stopRemote) {
         cancelPendingConnect();
-        switchToLocal(stopRemote);
+        switchToLocal(stopRemote, false);
     }
 
     @Override
@@ -158,32 +178,70 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
         if (sonosPlayer == null) {
             return;
         }
-        switchToLocal(false);
+        boolean resumeLocally = reason == SonosPlayer.EndReason.ERROR && sonosPlayer.getPlayWhenReady();
+        switchToLocal(false, resumeLocally);
         sessionManager.onSessionEnded();
-        if (reason == SonosPlayer.EndReason.TAKEOVER) {
+        if (reason == SonosPlayer.EndReason.ERROR) {
+            EventBus.getDefault().post(new MessageEvent(context.getString(R.string.sonos_cannot_play,
+                    context.getString(R.string.sonos_reason_load_failed))));
+        } else if (reason == SonosPlayer.EndReason.TAKEOVER) {
             EventBus.getDefault().post(new MessageEvent(context.getString(R.string.sonos_session_taken_over)));
         } else if (reason == SonosPlayer.EndReason.UNREACHABLE) {
             EventBus.getDefault().post(new MessageEvent(context.getString(R.string.sonos_session_unreachable)));
         }
     }
 
-    private void switchToLocal(boolean stopRemote) {
+    private void switchToLocal(boolean stopRemote, boolean playWhenReady) {
         SonosPlayer sonos = sonosPlayer;
         if (sonos == null) {
             return;
         }
         sonosPlayer = null;
-        MediaItem item = sonos.getCurrentMediaItem();
-        long position = sonos.getCurrentPosition();
+        final MediaItem item = sonos.getCurrentMediaItem();
+        final long position = sonos.getCurrentPosition();
+        final String synced = syncedMediaId;
+        syncedMediaId = null;
         sonos.setListener(null);
         sonos.removeListener(volumeListener);
         if (item != null) {
             localPlayer.setMediaItem(item, position == C.TIME_UNSET ? 0 : position);
-            localPlayer.setPlayWhenReady(false);
+            localPlayer.setPlayWhenReady(playWhenReady);
             localPlayer.prepare();
         }
         setPlayer(localPlayer);
         sonos.endSession(stopRemote);
+        if (item != null && item.mediaId.equals(synced)) {
+            resolveLocalItem(item.mediaId);
+        }
+    }
+
+    private void resolveLocalItem(String mediaId) {
+        if (resolver == null) {
+            return;
+        }
+        long id;
+        try {
+            id = Long.parseLong(mediaId);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        MediaItemResolver currentResolver = resolver;
+        resolverExecutor.execute(() -> {
+            MediaItem resolved = currentResolver.resolve(id);
+            if (resolved == null) {
+                return;
+            }
+            handler.post(() -> {
+                MediaItem current = localPlayer.getCurrentMediaItem();
+                if (sonosPlayer != null || current == null || !mediaId.equals(current.mediaId)) {
+                    return;
+                }
+                boolean playWhenReady = localPlayer.getPlayWhenReady();
+                localPlayer.setMediaItem(resolved, localPlayer.getCurrentPosition());
+                localPlayer.setPlayWhenReady(playWhenReady);
+                localPlayer.prepare();
+            });
+        });
     }
 
     private void cancelPendingConnect() {
@@ -210,7 +268,7 @@ public class SonosRoutingPlayer extends ForwardingSimpleBasePlayer
             MediaItem item = mediaItems.get(index);
             SonosPlayable.Reason reason = SonosPlayable.check(item);
             if (reason != null) {
-                switchToLocal(true);
+                switchToLocal(true, false);
                 sessionManager.onPlayableRejected(reason);
                 return super.handleSetMediaItems(mediaItems, startIndex, startPositionMs);
             }

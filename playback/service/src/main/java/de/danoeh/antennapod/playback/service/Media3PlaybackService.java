@@ -123,7 +123,7 @@ public class Media3PlaybackService extends MediaLibraryService {
         });
         initLoudnessEnhancer(exoPlayer.getAudioSessionId());
         Player maybeCastPlayer = CastPlayerWrapper.wrap(exoPlayer, this);
-        Player maybeSonosPlayer = SonosRoutingPlayer.wrap(maybeCastPlayer, this);
+        Player maybeSonosPlayer = SonosRoutingPlayer.wrap(maybeCastPlayer, this, this::resolveMediaItem);
         player = new ForwardingPlayer(maybeSonosPlayer) {
             @Override
             @NonNull
@@ -589,6 +589,12 @@ public class Media3PlaybackService extends MediaLibraryService {
                     ? player.getCurrentMediaItem().mediaId
                     : "null"), e);
         }
+    }
+
+    @Nullable
+    private MediaItem resolveMediaItem(long mediaId) {
+        FeedMedia media = DBReader.getFeedMedia(mediaId);
+        return media != null ? MediaItemAdapter.fromPlayable(this, media, false) : null;
     }
 
     @OptIn(markerClass = UnstableApi.class)

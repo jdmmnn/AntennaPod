@@ -556,6 +556,7 @@
     <string name="sonos_reason_no_url">episode has no online address</string>
     <string name="sonos_reason_video">videos are not supported</string>
     <string name="sonos_reason_format">unsupported audio format</string>
+    <string name="sonos_reason_load_failed">the speaker could not load the episode</string>
     <string name="sonos_no_devices_hint">No Sonos speakers found. Make sure your phone is on the same Wi-Fi and UPnP is enabled in the Sonos app.</string>
     <string name="pref_feed_playback_speed_sum">The speed to use when starting audio playback for episodes in this podcast</string>
     <string name="pref_feed_skip">Auto skip</string>

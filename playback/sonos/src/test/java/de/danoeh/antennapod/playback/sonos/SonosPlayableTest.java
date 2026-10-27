@@ -77,8 +77,9 @@ public class SonosPlayableTest {
         assertTrue(SonosRouteDialogFactory.isLastSonosRoute("pkg:sonos:RINCON_1:2", "RINCON_1:2"));
         assertFalse(SonosRouteDialogFactory.isLastSonosRoute("sonos:RINCON_2:3", "RINCON_1:2"));
         assertFalse(SonosRouteDialogFactory.isLastSonosRoute("sonos:RINCON_1:2", ""));
-        assertTrue(SonosRouteDialogFactory.shouldShowNoDevicesHint(true, false));
-        assertFalse(SonosRouteDialogFactory.shouldShowNoDevicesHint(true, true));
-        assertFalse(SonosRouteDialogFactory.shouldShowNoDevicesHint(false, false));
+        assertTrue(SonosRouteDialogFactory.shouldShowNoDevicesHint(true, false, false));
+        assertFalse(SonosRouteDialogFactory.shouldShowNoDevicesHint(true, true, false));
+        assertFalse(SonosRouteDialogFactory.shouldShowNoDevicesHint(false, false, false));
+        assertFalse(SonosRouteDialogFactory.shouldShowNoDevicesHint(true, false, true));
     }
 }
