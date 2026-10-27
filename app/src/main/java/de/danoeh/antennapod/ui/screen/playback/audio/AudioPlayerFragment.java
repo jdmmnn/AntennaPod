@@ -63,6 +63,7 @@ import de.danoeh.antennapod.event.playback.BufferUpdateEvent;
 import de.danoeh.antennapod.event.playback.PlaybackPositionEvent;
 import de.danoeh.antennapod.event.playback.PlaybackServiceEvent;
 import de.danoeh.antennapod.event.playback.SleepTimerUpdatedEvent;
+import de.danoeh.antennapod.event.playback.SonosSessionEvent;
 import de.danoeh.antennapod.event.playback.SpeedChangedEvent;
 import de.danoeh.antennapod.ui.episodeslist.FeedItemMenuHandler;
 import de.danoeh.antennapod.model.feed.Chapter;
@@ -70,6 +71,7 @@ import de.danoeh.antennapod.model.feed.FeedItem;
 import de.danoeh.antennapod.model.feed.FeedMedia;
 import de.danoeh.antennapod.model.playback.Playable;
 import de.danoeh.antennapod.playback.cast.CastEnabledActivity;
+import de.danoeh.antennapod.playback.sonos.SonosSessionManager;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import io.reactivex.rxjava3.core.Maybe;
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
@@ -86,6 +88,7 @@ public class AudioPlayerFragment extends Fragment implements
     public static final int POS_DESCRIPTION = 1;
     private static final int NUM_CONTENT_FRAGMENTS = 2;
 
+    private ImageButton butPlaybackSpeed;
     private TextView txtvPlaybackSpeed;
     private ViewPager2 pager;
     private TextView txtvPosition;
@@ -101,6 +104,7 @@ public class AudioPlayerFragment extends Fragment implements
     private ProgressBar progressIndicator;
     private CardView cardViewSeek;
     private TextView txtvSeek;
+    private TextView txtvSonosPlayingOn;
 
     private FeedMedia currentMedia;
     private Disposable disposable;
@@ -140,10 +144,11 @@ public class AudioPlayerFragment extends Fragment implements
         progressIndicator = root.findViewById(R.id.progLoading);
         cardViewSeek = root.findViewById(R.id.cardViewSeek);
         txtvSeek = root.findViewById(R.id.txtvSeek);
+        txtvSonosPlayingOn = root.findViewById(R.id.txtvSonosPlayingOn);
 
         setupLengthTextView();
         setupControlButtons();
-        final ImageButton butPlaybackSpeed = root.findViewById(R.id.butPlaybackSpeed);
+        butPlaybackSpeed = root.findViewById(R.id.butPlaybackSpeed);
         butPlaybackSpeed.setOnClickListener(v -> new VariableSpeedDialog().show(getChildFragmentManager(), null));
         sbPosition.setOnSeekBarChangeListener(this);
 
@@ -273,6 +278,24 @@ public class AudioPlayerFragment extends Fragment implements
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onSonosSessionEvent(SonosSessionEvent event) {
+        updateSonosPlayingOn(event.getGroupName());
+    }
+
+    private void updateSonosPlayingOn(@Nullable String groupName) {
+        boolean sonosActive = groupName != null;
+        butPlaybackSpeed.setEnabled(!sonosActive);
+        butPlaybackSpeed.setAlpha(sonosActive ? 0.4f : 1.0f);
+        txtvPlaybackSpeed.setAlpha(sonosActive ? 0.4f : 1.0f);
+        if (groupName == null) {
+            txtvSonosPlayingOn.setVisibility(View.GONE);
+        } else {
+            txtvSonosPlayingOn.setText(getString(R.string.sonos_playing_on, groupName));
+            txtvSonosPlayingOn.setVisibility(View.VISIBLE);
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
     public void onPlaybackServiceChanged(PlaybackServiceEvent event) {
         if (event.action == PlaybackServiceEvent.Action.SERVICE_SHUT_DOWN) {
             ((MainActivity) getActivity()).getBottomSheet().setState(BottomSheetBehavior.STATE_COLLAPSED);
@@ -358,6 +381,7 @@ public class AudioPlayerFragment extends Fragment implements
         super.onStart();
         loadMediaInfo(false);
         EventBus.getDefault().register(this);
+        updateSonosPlayingOn(SonosSessionManager.getInstance(getContext()).getConnectedGroupName());
         txtvRev.setText(NumberFormat.getInstance().format(UserPreferences.getRewindSecs()));
         txtvFF.setText(NumberFormat.getInstance().format(UserPreferences.getFastForwardSecs()));
     }

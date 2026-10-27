@@ -9,6 +9,9 @@ import androidx.collection.ArrayMap;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import de.danoeh.antennapod.R;
+import de.danoeh.antennapod.playback.sonos.SonosMediaRouteProvider;
+import de.danoeh.antennapod.playback.sonos.SonosSessionManager;
+import de.danoeh.antennapod.storage.preferences.SonosPreferences;
 import de.danoeh.antennapod.storage.preferences.UserPreferences;
 import de.danoeh.antennapod.ui.preferences.screen.AnimatedPreferenceFragment;
 import de.danoeh.antennapod.ui.screen.feed.preferences.SkipPreferenceDialog;
@@ -54,6 +57,13 @@ public class PlaybackPreferencesFragment extends AnimatedPreferenceFragment {
             findPreference(UserPreferences.PREF_UNPAUSE_ON_HEADSET_RECONNECT).setVisible(false);
             findPreference(UserPreferences.PREF_UNPAUSE_ON_BLUETOOTH_RECONNECT).setVisible(false);
         }
+        findPreference(SonosPreferences.PREF_ENABLED).setOnPreferenceClickListener(preference -> {
+            if (!SonosPreferences.isEnabled()) {
+                SonosSessionManager.getInstance(activity).disconnect(true);
+            }
+            SonosMediaRouteProvider.registerIfEnabled(activity);
+            return true;
+        });
 
         buildEnqueueLocationPreference();
     }

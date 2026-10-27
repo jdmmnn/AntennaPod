@@ -70,6 +70,7 @@ dependencies {
     implementation project(':parser:transcript')
     implementation project(':playback:base')
     implementation project(':playback:cast')
+    implementation project(':playback:sonos')
     implementation project(':storage:database')
     implementation project(':storage:database-maintenance-service')
     implementation project(':storage:importexport')

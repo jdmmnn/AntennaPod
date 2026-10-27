@@ -547,6 +547,17 @@
     <string name="pref_theme_title_dark">Dark</string>
     <string name="pref_episode_cache_unlimited">Unlimited</string>
     <string name="pref_playback_speed_sum">Customize the speeds available for variable speed playback</string>
+    <string name="pref_sonos_support_title">Sonos support (experimental)</string>
+    <string name="pref_sonos_support_summary">Show Sonos speakers in the same Wi-Fi when streaming</string>
+    <string name="sonos_playing_on">Playing on %1$s</string>
+    <string name="sonos_session_taken_over">Sonos is now playing something else. Playback paused on this device.</string>
+    <string name="sonos_session_unreachable">Lost connection to Sonos. Playback paused on this device.</string>
+    <string name="sonos_cannot_play">Cannot be played on Sonos: %1$s</string>
+    <string name="sonos_reason_no_url">episode has no online address</string>
+    <string name="sonos_reason_video">videos are not supported</string>
+    <string name="sonos_reason_format">unsupported audio format</string>
+    <string name="sonos_reason_load_failed">the speaker could not load the episode</string>
+    <string name="sonos_no_devices_hint">No Sonos speakers found. Make sure your phone is on the same Wi-Fi and UPnP is enabled in the Sonos app.</string>
     <string name="pref_feed_playback_speed_sum">The speed to use when starting audio playback for episodes in this podcast</string>
     <string name="pref_feed_skip">Auto skip</string>
     <string name="pref_feed_skip_sum">Skip introductions and ending credits</string>

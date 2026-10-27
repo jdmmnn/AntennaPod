@@ -12,13 +12,15 @@ dependencies {
     implementation project(':event')
     implementation project(':model')
     implementation project(':playback:base')
+    implementation project(':playback:sonos')
+    implementation project(':storage:preferences')
     implementation project(':ui:episodes')
 
     annotationProcessor libs.androidx.annotation
     implementation libs.androidx.appcompat
     implementation libs.eventbus
 
-    playApi libs.androidx.mediarouter
+    api libs.androidx.mediarouter
     playApi libs.google.play.services.cast.framework
     implementation libs.androidx.media3.exoplayer
     playImplementation libs.androidx.media3.cast

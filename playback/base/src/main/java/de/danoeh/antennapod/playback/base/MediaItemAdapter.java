@@ -32,6 +32,7 @@ public class MediaItemAdapter {
     public static final String MEDIA_ID_CONFIRM_STREAMING = "confirm_streaming";
     public static final String KEY_STREAM_URL = "stream_url";
     public static final String KEY_AUTHORIZATION_HEADER = "authorization_header";
+    public static final String KEY_MIME_TYPE = "mime_type";
 
     /**
      * Create a basic media item without attached metadata.
@@ -81,6 +82,9 @@ public class MediaItemAdapter {
         }
         Bundle extras = new Bundle();
         extras.putString(KEY_STREAM_URL, playable.getStreamUrl());
+        if (playable instanceof FeedMedia) {
+            extras.putString(KEY_MIME_TYPE, ((FeedMedia) playable).getMimeType());
+        }
         metadataBuilder.setExtras(extras);
         String localPlaybackUri;
         if (playable.localFileAvailable()) {
